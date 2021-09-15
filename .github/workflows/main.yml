@@ -12,7 +12,7 @@ jobs:
     - name: Gitbook Action                    # https://github.com/ZanderZhao/gitbook-action/releases
       uses: modelbox-ai/gitbook-action@master  # -> or ZanderZhao/gitbook-action@master.If not use master click above, use latest please 
       with:                                   #    or fork this repo and use YourName/gitbook-action@master
-        token: ${{secrets.GITPAGE}} # -> remember add this in settings/secrets as following
+        token: ${{secrets.MANAGER_TOKEN}} # -> remember add this in settings/secrets as following
         source_branch: main
         publish_branch: gh_pages
         publish_push_force: true
