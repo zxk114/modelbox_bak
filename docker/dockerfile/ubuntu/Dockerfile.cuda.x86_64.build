@@ -1,0 +1,85 @@
+ARG BASE_IMAGE=modelbox/modelbox_base_ubuntu:latest
+FROM ${BASE_IMAGE} as base
+
+ARG CUDA_VER="11-2"
+ARG CUDA_NUM="cuda112"
+ARG CUDA_VERSION="11.2"
+ARG CUDA_BUILD="11.2.2-460.32.03"
+ARG TRT_VERSION=""
+ARG TORCH_VERSION=""
+
+ADD *.tar.gz /usr/local/
+
+RUN curl -LO http://192.168.59.112:8080/cuda-repo-ubuntu1804-${CUDA_VER}-local-${CUDA_BUILD}_1.0-1_amd64.deb && \
+    curl -LO http://192.168.59.112:8080/nv-tensorrt-repo-ubuntu1804-${TRT_VERSION}_1-1_amd64.deb && \
+    dpkg -i cuda-repo-ubuntu1804-${CUDA_VER}-local-${CUDA_BUILD}_1.0-1_amd64.deb && \
+    dpkg -i nv-tensorrt-repo-ubuntu1804-${TRT_VERSION}_1-1_amd64.deb && \
+    curl -LO http://192.168.59.112:8080/cuda-repo-ubuntu1804-10-2-local_10.2.1-1_amd64.deb && \
+    curl -LO http://192.168.59.112:8080/cuda-repo-ubuntu1804-10-2-local_10.2.2-1_amd64.deb && \
+    dpkg -i cuda-repo-ubuntu1804-10-2-local_10.2.1-1_amd64.deb && \
+    dpkg -i cuda-repo-ubuntu1804-10-2-local_10.2.2-1_amd64.deb && \
+    find /var/ -name 7fa2af80.pub|xargs apt-key add && \
+    apt update && \
+    apt install -y \
+        tensorrt \
+        cuda-compat-${CUDA_VER} \
+        cuda-minimal-build-${CUDA_VER} \
+        cuda-libraries-dev-${CUDA_VER} \
+        cuda-command-line-tools-${CUDA_VER} && \
+    ln -s cuda-${CUDA_VERSION} /usr/local/cuda && \
+    apt remove -y \
+        nv-tensorrt-repo-ubuntu1804-${TRT_VERSION} \
+        cuda-repo-ubuntu1804-${CUDA_VER}-local$(if [ "$CUDA_VERSION" != "11.2" ];then echo "-${CUDA_BUILD}";fi) && \
+    rm -rf /usr/src/tensorrt && \
+    apt remove -y cuda-repo-ubuntu1804-10-2-local && \
+    find / -name libcublas.so.${CUDA_VERSION%.*}|xargs -i ln -s {} /usr/lib/x86_64-linux-gnu/libcublas.so.${CUDA_VERSION} && \
+    cp -af /usr/local/cuda/compat/* /usr/local/lib/ && \
+    apt clean all && rm -rf /root/* /var/cache
+
+RUN umask 0022 && \
+    # 安装nodejs
+    curl http://192.168.59.112:8080/node-v16.13.0-linux-x64.tar.gz|tar zxC /root/ && \
+    cp -af /root/bin /usr/local/ && \
+    cp -af /root/include /usr/local/ && \
+    cp -af /root/lib /usr/local/ && \
+    cp -af /root/share /usr/local/ && \
+    npm config set registry https://registry.npm.taobao.org && \
+    npm install -g npm@latest && npm -v && node -v && \
+    npm install -g @angular/cli && \
+    npm cache clean --force && \
+    # 安装Vcodec
+    curl -O http://192.168.59.112:8080/Video_Codec_SDK_9.1.23.zip && \
+    unzip Video_Codec_SDK_9.1.23.zip -d /root >/dev/null 2>&1 && \
+    cp -af Video_Codec_SDK_9.1.23/include /usr/local/ && \
+    cp -af Video_Codec_SDK_9.1.23/Lib/linux/stubs/x86_64/*.so /usr/local/lib/ && \
+    # 安装libtorch
+    curl -O http://192.168.59.112:8080/libtorch-cxx11-abi-shared-with-deps-${TORCH_VERSION}.zip && \
+    unzip libtorch-cxx11-abi-shared-with-deps-${TORCH_VERSION}.zip -d /root >/dev/null 2>&1 && \
+    cp -af libtorch/lib /usr/local/ && \
+    cp -af libtorch/include /usr/local/ && \
+    cp -af libtorch/share /usr/local/ && \
+    # 安装jdk
+    curl http://192.168.59.112:8080/jdk-17_linux-x64_bin.tar.gz|tar zxC /usr/local/ && \
+    # 安装maven
+    curl http://192.168.59.112:8080/apache-maven-3.8.3-bin.tar.gz|tar zxC /usr/local/ && \
+    rm -rf  /usr/local/apache-maven-3.8.3/lib/jansi-native/Windows && \
+    # 配置pip源
+    mkdir -p /root/.pip && \
+    echo "[global]" > /root/.pip/pip.conf && \
+    echo "index-url = https://pypi.mirrors.ustc.edu.cn/simple" >>/root/.pip/pip.conf && \
+    echo "trusted-host = pypi.mirrors.ustc.edu.cn" >>/root/.pip/pip.conf && \
+    echo "timeout = 120" >>/root/.pip/pip.conf && \
+    python3 -m pip install --upgrade pip && \
+    python3 -m pip install --no-cache-dir numpy && \
+    # 其它配置
+    rm -rf /root/* && \
+    rm -f /usr/bin/python && ln -s python3 /usr/bin/python && \
+    echo "/usr/local/lib" >>  /etc/ld.so.conf && \
+    sed -i "32aPermitRootLogin yes" /etc/ssh/sshd_config && \
+    sed -i 's/^\(module(load="imklog")\)/#\1/' /etc/rsyslog.conf && \
+    echo 'export TMOUT=0' >> ~/.bashrc && \
+    echo "export JAVA_HOME=/usr/lib/jvm/jdk-17" >> ~/.bashrc && \
+    echo "export MAVEN_HOME=/usr/local/apache-maven-3.8.3" >> ~/.bashrc && \
+    echo "export PATH=\${JAVA_HOME}/bin:\${MAVEN_HOME}/bin:$PATH" >> ~/.bashrc && \
+    echo 'export PS1="\[\e[35;1m\][\u@\h \W]$ \[\e[0m\]"' >> ~/.bashrc && \
+    echo '[ -n "${SSH_TTY}" ] && export $(cat /proc/1/environ|tr "\\0" "\\n"|xargs)' >> ~/.bashrc

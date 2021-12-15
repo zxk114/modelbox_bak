@@ -1,0 +1,14 @@
+ARG BASE_IMAGE=openeuler-20.03-lts-sp2:latest
+FROM ${BASE_IMAGE} as base
+
+WORKDIR /root
+
+RUN umask 0022 && \
+    ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone && \
+    yum update -y && \
+    yum install -y vim gcc gcc-c++ make cmake libnsl python3-perf rsyslog doxygen pciutils gdb net-tools zlib-devel \
+            rpm-build gcc-gfortran alsa-lib nss-devel fuse-devel gdbm-devel krb5-devel expat-devel curl-devel bzip2-devel \
+            boost-devel ncurses-devel libxml2-devel libssh2-devel openssh-server python3-devel glibc-debuginfo libatomic \
+            git clang xauth graphviz-devel sqlite-devel openssl-devel readline-devel mesa-libGL-devel protobuf-c-devel && \
+    ls -lh /usr/bin/python* && ln -s python3 /usr/bin/python && yum clean all && \
+    rm -rf /var/cache /tmp/* /var/tmp/*

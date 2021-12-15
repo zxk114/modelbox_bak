@@ -1,0 +1,41 @@
+ARG DEVICE="${DEVICE}"
+FROM modelbox/modelbox_${DEVICE}_build_openeuler:latest
+
+ADD thirdparty.tar.gz /opt/
+COPY release /opt/release
+
+ARG TF_VERSION="2.6.0"
+ARG NVIDIA_CUDA_VERSION="11.2.2"
+ARG NVIDIA_REQUIRE_CUDA="cuda>=11.2 brand=tesla,driver>=418,driver<419 brand=tesla,driver>=440,driver<441 brand=tesla,driver>=450,driver<451 brand=tesla,driver>=460,driver<461"
+
+RUN python3 -m pip install --no-cache-dir numpy wheel pyyaml requests opencv-python pillow tensorflow-gpu==${TF_VERSION} && \
+    python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && \
+    rpm -ivh /opt/release/*.rpm && \
+    rm -f /usr/local/lib64/libnvidia* /usr/local/lib64/libcuda.so* /usr/local/lib64/libnvcuvid.so && \
+    (cd /lib/systemd/system/sysinit.target.wants/; for i in *; \
+    do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done); \
+    rm -f /lib/systemd/system/multi-user.target.wants/*; \
+    rm -f /etc/systemd/system/*.wants/*; \
+    rm -f /lib/systemd/system/local-fs.target.wants/*; \
+    rm -f /lib/systemd/system/sockets.target.wants/*udev*; \
+    rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
+    rm -f /lib/systemd/system/basic.target.wants/*; \
+    rm -f /lib/systemd/system/anaconda.target.wants/*; \
+    sed -i 's/^SystemMaxUse=.*/SystemMaxUse=16M/g' /etc/systemd/journald.conf && \
+    sed -i '/ForwardToSyslog/s/^#//g' /etc/systemd/journald.conf && \
+    systemctl set-default multi-user.target && \
+    systemctl mask dev-hugepages.mount sys-fs-fuse-connections.mount && \
+    ldconfig &>/dev/null && systemctl enable modelbox sshd systemd-journald
+
+VOLUME ["/sys/fs/cgroup", "/tmp", "/run", "/run/lock"]
+STOPSIGNAL SIGRTMIN+3
+
+LABEL com.nvidia.volumes.needed="nvidia_driver" com.nvidia.cuda.verison="${NVIDIA_CUDA_VERSION}"
+
+ENV PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/lib:$LD_LIBRARY_PATH
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=video,compute,utility
+ENV NVIDIA_REQUIRE_CUDA="${NVIDIA_REQUIRE_CUDA}"
+
+CMD ["/sbin/init", "--log-target=journal"]
