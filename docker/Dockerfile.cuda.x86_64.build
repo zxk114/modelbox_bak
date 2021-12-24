@@ -6,7 +6,7 @@ ARG CUDA_VERSION="11.2"
 ARG CUDA_CUDART_VERSION="11.2.152-1"
 ARG TRT_VERSION=""
 ARG TORCH_VERSION=""
-ARG NVIDIA_REQUIRE_CUDA '"cuda>=11.2 brand=tesla,driver>=418,driver<419 brand=tesla,driver>=440,driver<441 driver>=450"'
+ARG NVIDIA_REQUIRE_CUDA 'cuda>=11.2 brand=tesla,driver>=418,driver<419 brand=tesla,driver>=440,driver<441 driver>=450'
 
 WORKDIR /root
 
