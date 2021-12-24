@@ -1,4 +1,4 @@
-name: Publish CUDA11.2 RunTime
+name: Publish CUDA10.2 RunTime
 on:
   workflow_dispatch:
   push:
