@@ -6,7 +6,6 @@ ARG CUDA_VERSION="11.2"
 ARG CUDA_CUDART_VERSION="11.2.152-1"
 ARG TRT_VERSION=""
 ARG TORCH_VERSION=""
-ARG NVIDIA_REQUIRE_CUDA 'cuda>=11.2 brand=tesla,driver>=418,driver<419 brand=tesla,driver>=440,driver<441 driver>=450'
 
 WORKDIR /root
 
@@ -92,3 +91,4 @@ ENV LIBRARY_PATH /usr/local/cuda/lib64/stubs
 # nvidia-container-runtime
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+ENV NVIDIA_REQUIRE_CUDA "cuda>=11.2 brand=tesla,driver>=418,driver<419 brand=tesla,driver>=440,driver<441 driver>=450"
