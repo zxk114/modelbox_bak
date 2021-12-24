@@ -38,11 +38,11 @@ RUN curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu18
     rm -rf /var/lib/apt/lists/*
 
 # Install TensorRT/Libtorch/TensorFlow
-RUN if [ "${CUDA_VERSION}" = "10.2" ]; then \
+RUN if [ "${CUDA_VERSION}" == "10.2" ]; then \
         if [ -n "${TRT_VERSION}" ]; then
-            v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION}" &&\
-            echo "deb ${NV_ML_REPO_URL} /" > /etc/apt/sources.list.d/nvidia-ml.list && \
-            apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub && \
+            v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION}" && \
+            curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub | apt-key add - && \
+            echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list && \
             apt-get update && \
             sudo apt-get install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
                 libnvinfer=${v} libnvonnxparsers=${v} libnvparsers=${v} libnvinfer-plugin=${v} \
@@ -51,7 +51,7 @@ RUN if [ "${CUDA_VERSION}" = "10.2" ]; then \
             wget https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.9.1%2Bcu102.zip && \
             unzip libtorch-cxx11-abi-shared-with-deps-1.9.1%2Bcu102.zip -d /root >/dev/null 2>&1 && \
             cp -af libtorch/{lib,include,share} /usr/local/;fi \
-    elif [ "${CUDA_VERSION}" = "11.2" ]; then \
+    elif [ "${CUDA_VERSION}" == "11.2" ]; then \
         curl https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-linux-x86_64-2.6.0.tar.gz|tar zxC /usr/local/; \
     fi && \
     apt-get clean all && rm -rf /var/lib/apt/lists/*
