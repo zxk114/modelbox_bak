@@ -1,0 +1,52 @@
+name: Publish CUDA10.2 Develop
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+env:
+  CUDA_VER: "10-2"
+  CUDA_VERSION: "10.2"
+  TRT_VERSION: ""
+  TORCH_VERSION: ""
+  NVIDIA_REQUIRE_CUDA: "cuda>=10.2 brand=tesla,driver>=396,driver<397 brand=tesla,driver>=410,driver<411 brand=tesla,driver>=418,driver<419 brand=tesla,driver>=440,driver<441"
+  CUDA_CUDART_VERSION: "10.2.89-1"
+  DOCKERHUB_REPO: "modelbox/modelbox-devel-tensorflow_2.6.0-cuda_11.2-ubuntu-x86_64"
+  IMAGE_VERSION: "1.0.0"
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate Image Version
+        run: echo IMAGE_VERSION=`git describe --tags --always` >> $GITHUB_ENV
+
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          file: docker/Dockerfile.cuda.x86_64.build
+          build-args: |
+            CUDA_VER=${{ env.CUDA_VER }}
+            CUDA_VERSION=${{ env.CUDA_VERSION }}
+            TRT_VERSION=${{ env.TRT_VERSION }}
+            TORCH_VERSION=${{ env.TORCH_VERSION }}
+            NVIDIA_REQUIRE_CUDA=${{ env.NVIDIA_REQUIRE_CUDA }}
+            CUDA_CUDART_VERSION=${{ env.CUDA_CUDART_VERSION }}
+            IMAGE_VERSION=${{ env.IMAGE_VERSION }}
+          tags: |
+            ${{ env.DOCKERHUB_REPO }}:latest
+            ${{ env.DOCKERHUB_REPO }}:${{ env.IMAGE_VERSION }}
