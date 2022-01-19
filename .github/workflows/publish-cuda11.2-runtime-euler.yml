@@ -1,4 +1,4 @@
-name: Publish CUDA11.2 Develop
+name: Publish CUDA11.2 Runtime Openeuler
 on:
   workflow_dispatch:
   push:
@@ -10,52 +10,47 @@ env:
   CUDA_VERSION: "11.2"
   CUDA_CUDART_VERSION: "11.2.152-1"
   VIDEOSDK_VERSION: "9.1.23"
-  DOCKERHUB_REPO: "modelbox/modelbox-develop-tensorflow_2.6.0-cuda_11.2-ubuntu-x86_64"
+  DOCKERHUB_REPO: "zxk114/modelbox-runtime-tensorflow_2.6.0-cuda_11.2-openeuler-x86_64"
   IMAGE_VERSION: "v1.1.3"
 
 jobs:
   compile:
     runs-on: ubuntu-latest
-    container: ubuntu:18.04
+    container: openeuler:20.03-lts-sp3
     steps:
     - uses: actions/checkout@v2
     - name: Install dependencies
       run: |
         ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
         echo "Asia/Shanghai" > /etc/timezone
-        apt-get update
-        apt-get upgrade -y
-        apt-get remove --purge python3-apt
-        apt-get install --no-install-recommends -y dbus iproute2 gnupg2 curl ca-certificates
-        apt-get install -y python3.7-dev python3-pip python3-apt python3-setuptools
-        rm -f /usr/bin/python3 /usr/bin/python
-        ln -s python3.7 /usr/bin/python3
-        ln -s python3 /usr/bin/python
-        apt-get install -y \
-            build-essential unzip ffmpeg sudo bash vim gdb git doxygen autoconf cmake openssh-server \
-            python3-wheel python3-numpy python3-opencv libopencv-dev pkg-config kmod net-tools pciutils \
-            libssl-dev libcpprest-dev libswscale-dev libavformat-dev graphviz libgraphviz-dev libfuse-dev \
-            libprotobuf-c-dev protobuf-c-compiler duktape-dev libmosquitto-dev
+        yum update -y && \
+        yum install -y vim gcc gcc-c++ make cmake libnsl python3-perf rsyslog doxygen pciutils gdb net-tools zlib-devel \
+                rpm-build gcc-gfortran alsa-lib nss-devel fuse-devel gdbm-devel krb5-devel expat-devel curl-devel bzip2-devel \
+                boost-devel ncurses-devel libxml2-devel libssh2-devel openssh-server python3-devel glibc-debuginfo libatomic \
+                git clang xauth graphviz-devel sqlite-devel openssl-devel readline-devel mesa-libGL-devel protobuf-c-devel && \
+        ls -lh /usr/bin/python* && ln -s python3 /usr/bin/python && yum clean all && \
+        rm -rf /var/cache /tmp/* /var/tmp/*
     - name: Install cuda
       run: |
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub | apt-key add -
-        cp -af ./docker/repo/*.list /etc/apt/sources.list.d/
-        apt-get update
-        apt install -y libcudnn8=8.1.1.33-1+cuda11.2
-        apt-get install -y --no-install-recommends \
+        NVIDIA_GPGKEY_SUM=d1be581509378368edeec8c1eb2958702feedf3bc3d17011adbf24efacce4ab5 && \
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/rhel7/${NVARCH}/7fa2af80.pub | sed '/^Version/d' > /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA && \
+        echo "$NVIDIA_GPGKEY_SUM  /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA" | sha256sum -c --strict -
+
+        yum install -y libcudnn8-devel-8.1.1.33-1.cuda11.2
+        yum install -y --no-install-recommends \
             cuda-cudart-${CUDA_VER}=${CUDA_CUDART_VERSION} \
             cuda-compat-${CUDA_VER} \
             cuda-minimal-build-${CUDA_VER} \
             cuda-libraries-dev-${CUDA_VER} \
             cuda-command-line-tools-${CUDA_VER}
         ln -s cuda-${CUDA_VERSION} /usr/local/cuda
-        rm -rf /var/lib/apt/lists/*
+
     - name: Install ThirdParty
       run: |
         curl https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-gpu-linux-x86_64-2.6.0.tar.gz|sudo tar zxC /usr/local/
 
         curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-        apt-get install -y nodejs
+        yum install -y nodejs
         npm install -g npm@latest
         npm install -g @angular/cli
         npm cache clean --force
@@ -78,18 +73,16 @@ jobs:
         curl https://download.java.net/java/GA/jdk17.0.1/2a2082e5a09d4267845be086888add4f/12/GPL/openjdk-17.0.1_linux-x64_bin.tar.gz|tar zxC /usr/local/
         curl https://dlcdn.apache.org/maven/maven-3/3.8.4/binaries/apache-maven-3.8.4-bin.tar.gz|tar zxC /usr/local/
 
-        yes | sudo python3 -m pip install --upgrade pip
-        yes | sudo pip3 install pillow numpy
-    - name: Configure env
+        yes | python3 -m pip install --upgrade pip
+        yes | pip3 install pillow numpy
+    - name: CMake
       run: |
+        pwd
         export JAVA_HOME=/usr/lib/jvm/jdk-17
         export MAVEN_HOME=/usr/local/apache-maven-3.8.3
         export LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
         export PATH=/usr/local/cuda/bin:$JAVA_HOME/bin:$MAVEN_HOME/bin${PATH:+:${PATH}}
         export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}
-    - name: CMake
-      run: |
-        pwd
         ls -lh .
         ldconfig
         mkdir build
@@ -99,7 +92,6 @@ jobs:
       working-directory: ${{github.workspace}}/build
       run: |
         make package -j4
-        rm -f release/*.rpm
         ls -lh release
         filecount=$(ls release | wc -l)
         dpkgcount=$(ls release | egrep "*.deb" | wc -l)
@@ -110,48 +102,5 @@ jobs:
             echo "compile failed"
             exit 1
         fi
-    - name: upload-artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: modelbox-release
-        path: ${{github.workspace}}/build/release
 
-  build_image:
-    runs-on: ubuntu-latest
-    needs: compile
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: mkdir
-        run: mkdir ./release
-      - name: download-artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: modelbox-release
-          path: ./release/
-      - name: Prepare
-        run: |
-          ls -lh ./release/*
-      - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v2
-        with:
-          push: true
-          context: .
-          file: ./docker/Dockerfile.cuda112.develop
-          build-args: |
-            CUDA_VER=${{ env.CUDA_VER }}
-            CUDA_VERSION=${{ env.CUDA_VERSION }}
-            TF_VERSION=${{ env.TF_VERSION }}
-            CUDA_CUDART_VERSION=${{ env.CUDA_CUDART_VERSION }}
-            IMAGE_VERSION=${{ env.IMAGE_VERSION }}
-          tags: |
-            ${{ env.DOCKERHUB_REPO }}:latest
-            ${{ env.DOCKERHUB_REPO }}:${{ env.IMAGE_VERSION }}
+

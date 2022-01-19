@@ -12,7 +12,7 @@ env:
   TORCH_VERSION: "1.9.1"
   VIDEOSDK_VERSION: "9.1.23"
   DOCKERHUB_REPO: "modelbox/modelbox-runtime-libtorch_1.9.1-cuda_10.2-ubuntu-x86_64"
-  IMAGE_VERSION: "1.1.3"
+  IMAGE_VERSION: "v1.1.3"
 
 jobs:
   compile:
