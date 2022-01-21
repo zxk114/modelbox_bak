@@ -39,6 +39,7 @@ RUN echo "TRT_VERSION is $TRT_VERSION" && echo "TORCH_VERSION is $TORCH_VERSION"
     echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list && \
     apt update && \
     if [ -n "${TRT_VERSION}" ]; then \
+        v="7.1.3-1+cuda10.2"
         apt-get install -y libnvinfer7=${v} libnvonnxparsers7=${v} libnvparsers7=${v} libnvinfer-plugin7=${v} python3-libnvinfer=${v} && \
         find /usr/ -name *cudnn*|xargs rm -fr; \
     elif [ -n "${TORCH_VERSION}" ]; then \
@@ -68,6 +69,7 @@ RUN mkdir -p /root/.pip && \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir numpy wheel pyyaml requests opencv-python pillow && \
     python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && \
+    ls /opt/release|egrep 'devel|document|solution'|xargs -i rm -f /opt/release/{} && \
     dpkg -i /opt/release/*.deb && \
     rm -rf /opt/release && \
     (cd /lib/systemd/system/sysinit.target.wants/; for i in *; \

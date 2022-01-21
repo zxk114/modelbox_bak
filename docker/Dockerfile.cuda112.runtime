@@ -56,6 +56,7 @@ RUN mkdir -p /root/.pip && \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir numpy wheel pyyaml requests opencv-python pillow tensorflow-gpu==2.6.0 && \
     python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && \
+    ls /opt/release|egrep 'devel|document|solution'|xargs -i rm -f /opt/release/{} && \
     dpkg -i /opt/release/*.deb && \
     rm -rf /opt/release /root/* && \
     (cd /lib/systemd/system/sysinit.target.wants/; for i in *; \

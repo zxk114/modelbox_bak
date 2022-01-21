@@ -1,4 +1,4 @@
-name: Publish CUDA10.2_torch Develop
+name: Publish cuda102_trt-develop-ubuntu
 on:
   workflow_dispatch:
   push:
@@ -9,9 +9,8 @@ env:
   CUDA_VER: "10-2"
   CUDA_VERSION: "10.2"
   CUDA_CUDART_VERSION: "10.2.89-1"
-  TORCH_VERSION: "1.9.1"
-  VIDEOSDK_VERSION: "9.1.23"
-  DOCKERHUB_REPO: "modelbox/modelbox-develop-libtorch_1.9.1-cuda_10.2-ubuntu-x86_64"
+  TRT_VERSION: "7.1.3.4"
+  DOCKERHUB_REPO: "modelbox/modelbox-develop-tensorrt_7.1.3-cuda_10.2-ubuntu-x86_64"
   IMAGE_VERSION: "v1.1.3"
 
 jobs:
@@ -37,23 +36,23 @@ jobs:
             python3-wheel python3-numpy python3-opencv libopencv-dev pkg-config kmod net-tools pciutils \
             libssl-dev libcpprest-dev libswscale-dev libavformat-dev graphviz libgraphviz-dev libfuse-dev \
             libprotobuf-c-dev protobuf-c-compiler duktape-dev libmosquitto-dev
-    - name: Install cuda+torch
+    - name: Install cuda+trt
       run: |
         curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub | apt-key add -
         cp -af ./docker/repo/*.list /etc/apt/sources.list.d/
         apt-get update
+        v="7.1.3-1+cuda10.2"
+        apt-get install -y libnvinfer7=${v} libnvonnxparsers7=${v} libnvparsers7=${v} libnvinfer-plugin7=${v}
+        apt-get install -y libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} python3-libnvinfer=${v} 
         apt-get install -y --no-install-recommends \
-           cuda-cudart-${CUDA_VER}=${CUDA_CUDART_VERSION} \
-           cuda-compat-${CUDA_VER} \
-           cuda-minimal-build-${CUDA_VER} \
-           cuda-libraries-dev-${CUDA_VER} \
-           cuda-command-line-tools-${CUDA_VER}
+                cuda-cudart-${CUDA_VER}=${CUDA_CUDART_VERSION} \
+                cuda-compat-${CUDA_VER} \
+                cuda-minimal-build-${CUDA_VER} \
+                cuda-libraries-dev-${CUDA_VER} \
+                cuda-command-line-tools-${CUDA_VER}
         ln -s cuda-${CUDA_VERSION} /usr/local/cuda
-        find /usr/ -name *cudnn*|xargs sudo rm -fr
+        find /usr/ -name *cudnn*|xargs rm -fr
         apt-get install -y libcudnn7-dev=7.6.5.32-1+cuda10.2 
-        curl -LJO https://download.pytorch.org/libtorch/cu102/libtorch-cxx11-abi-shared-with-deps-1.9.1%2Bcu102.zip
-        unzip libtorch-*.zip -d . >/dev/null 2>&1
-        cp -af libtorch/* /usr/local/
         rm -rf /var/lib/apt/lists/*
     - name: Install ThirdParty
       run: |
@@ -65,25 +64,31 @@ jobs:
 
         curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/obs-dev.tar.gz
         tar zxf obs-dev.tar.gz -C /usr/local/
-        curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/Video_Codec_SDK_${VIDEOSDK_VERSION}.tar.gz
-        tar zxf Video_Codec_SDK_${VIDEOSDK_VERSION}.tar.gz -C /usr/local/
+        curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/Video_Codec_SDK_9.1.23.zip
+        unzip -j Video_Codec_SDK_9.1.23.zip \
+            Video_Codec_SDK_9.1.23/include/cuviddec.h \
+            Video_Codec_SDK_9.1.23/include/nvcuvid.h \
+            Video_Codec_SDK_9.1.23/include/nvEncodeAPI.h \
+        -d /usr/local/include
+            unzip -j Video_Codec_SDK_9.1.23.zip \
+            Video_Codec_SDK_9.1.23/Lib/linux/stubs/x86_64/libnvcuvid.so \
+            Video_Codec_SDK_9.1.23/Lib/linux/stubs/x86_64/libnvidia-encode.so \
+            -d /usr/local/lib
+
         ln -s libnvcuvid.so /usr/local/lib/libnvcuvid.so.1
         ln -s /usr/local/cuda/lib64/libcublas.so.10 /usr/local/lib/libcublas.so.10.2
         cp -af /usr/local/cuda/compat/* /usr/local/lib/
 
-        curl -LJO https://download.java.net/java/GA/jdk17.0.1/2a2082e5a09d4267845be086888add4f/12/GPL/openjdk-17.0.1_linux-x64_bin.tar.gz
-        tar zxf openjdk-17.0.1_linux-x64_bin.tar.gz -C /usr/local/
-        curl -LJO https://dlcdn.apache.org/maven/maven-3/3.8.4/binaries/apache-maven-3.8.4-bin.tar.gz
-        tar zxf apache-maven-3.8.4-bin.tar.gz -C /usr/local/
-        ls -lh /usr/local/*
+        curl https://download.java.net/java/GA/jdk17.0.1/2a2082e5a09d4267845be086888add4f/12/GPL/openjdk-17.0.1_linux-x64_bin.tar.gz|tar zxC /usr/local/
+        curl https://dlcdn.apache.org/maven/maven-3/3.8.4/binaries/apache-maven-3.8.4-bin.tar.gz|tar zxC /usr/local/
 
         yes | python3 -m pip install --upgrade pip
-        yes | pip3 install pillow numpy
+        yes | pip3 install pillow numpy wheel
     - name: Configure env
       run: |
         export JAVA_HOME=/usr/lib/jvm/jdk-17
         export MAVEN_HOME=/usr/local/apache-maven-3.8.3
-        export LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/lib:/usr/local/cuda/lib64/stubs${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+        export LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
         export PATH=/usr/local/cuda/bin:$JAVA_HOME/bin:$MAVEN_HOME/bin${PATH:+:${PATH}}
         export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}
     - name: CMake
@@ -148,7 +153,7 @@ jobs:
           build-args: |
             CUDA_VER=${{ env.CUDA_VER }}
             CUDA_VERSION=${{ env.CUDA_VERSION }}
-            TORCH_VERSION=${{ env.TORCH_VERSION }}
+            TRT_VERSION=${{ env.TRT_VERSION }}
             CUDA_CUDART_VERSION=${{ env.CUDA_CUDART_VERSION }}
             IMAGE_VERSION=${{ env.IMAGE_VERSION }}
           tags: |

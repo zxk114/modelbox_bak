@@ -74,6 +74,7 @@ RUN umask 0022 && \
 
 RUN python3 -m pip install --no-cache-dir pyyaml opencv-python && \
     python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && \
+    ls /opt/release|egrep 'devel|document|solution'|xargs -i rm -f /opt/release/{} && \
     dpkg -i /opt/release/*.deb && \
     groupadd HwHiAiUser && \
     useradd -g HwHiAiUser -d /home/HwHiAiUser -m HwHiAiUser && \
