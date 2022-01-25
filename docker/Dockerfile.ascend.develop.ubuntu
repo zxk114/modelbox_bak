@@ -3,27 +3,42 @@ FROM modelbox/modelbox_base_ubuntu:latest
 FROM ubuntu:18.04
 
 COPY release /opt/release
+COPY docker/pkgconfig /usr/lib/pkgconfig
 COPY --from=0 /usr/local/Ascend /usr/local/Ascend
 
 ARG ASCEND_PATH=/usr/local/Ascend
-ENV ASCEND_AICPU_PATH=${ASCEND_PATH}/nnrt/latest
-ENV ASCEND_OPP_PATH=${ASCEND_PATH}/nnrt/latest/opp
-ENV DDK_PATH=${ASCEND_PATH}/nnrt/latest/acllib
+ENV LOCAL_ASCEND=/usr/local/Ascend
+ENV ASCEND_AICPU_PATH=${ASCEND_PATH}/ascend-toolkit/latest
+ENV ASCEND_OPP_PATH=${ASCEND_PATH}/ascend-toolkit/latest/opp
+ENV TOOLCHAIN_HOME=${ASCEND_PATH}/ascend-toolkit/latest/toolkit
+ENV TBE_IMPL_PATH=${ASCEND_PATH}/ascend-toolkit/latest/opp/op_impl/build-in/ai_core/tbe
+ENV MINDSPORE_PATH=/usr/local/lib/python3.7/dist-packages/mindspore
+ENV DDK_PATH=${ASCEND_PATH}/ascend-toolkit/latest/acllib
 ENV DRIVER_PATH=${ASCEND_PATH}/driver
+
+ENV PATH=\
+${ASCEND_PATH}/ascend-toolkit/latest/atc/bin:\
+${ASCEND_PATH}/ascend-toolkit/latest/fwkacllib/bin:\
+${ASCEND_PATH}/ascend-toolkit/latest/fwkacllib/ccec_compiler/bin:\
+${ASCEND_PATH}/ascend-toolkit/latest/atc/ccec_compiler/bin${PATH:+:${PATH}}
+
+ENV PYTHONPATH=\
+${ASCEND_PATH}/ascend-toolkit/latest/atc/python/site-packages:\
+${ASCEND_PATH}/ascend-toolkit/latest/toolkit/python/site-packages:\
+${ASCEND_PATH}/ascend-toolkit/latest/fwkacllib/python/site-packages:\
+${ASCEND_PATH}/ascend-toolkit/latest/opp/op_impl/build-in/ai_core/tbe:\
+${ASCEND_PATH}/ascend-toolkit/latest/pyACL/python/site-packages/acl${PYTHONPATH:+:${PYTHONPATH}}
 
 ENV LD_LIBRARY_PATH=\
 ${ASCEND_PATH}/driver/lib64:\
 ${ASCEND_PATH}/driver/lib64/driver:\
 ${ASCEND_PATH}/driver/lib64/common:\
-${ASCEND_PATH}/driver/lib64/driver:$LD_LIBRARY_PATH
+${ASCEND_PATH}/ascend-toolkit/latest/fwkacllib/lib64:\
+${ASCEND_PATH}/ascend-toolkit/latest/acllib/lib64:\
+${ASCEND_PATH}/ascend-toolkit/latest/atc/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 
-ENV LD_LIBRARY_PATH=\
-${ASCEND_PATH}/nnrt/latest/acllib/lib64:$LD_LIBRARY_PATH
-
-ENV PYTHONPATH=\
-${ASCEND_PATH}/nnrt/latest/pyACL/python/site-packages/acl:$PYTHONPATH
-
-RUN ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone && \
+RUN umask 0022 && \
+    ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone && \
     apt update && apt upgrade -y && \
     apt remove --purge python3-apt && \
     apt install -y python3.7-dev python3-pip python3-apt python3-setuptools && \
@@ -32,10 +47,12 @@ RUN ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shang
     ln -s python3.7 /usr/bin/python3 && \
     ln -s python3 /usr/bin/python && \
     apt install -y \
-        build-essential sudo bash unzip ffmpeg curl pkg-config\
-        python3-dev python3-pip python3-setuptools python3-wheel python3-numpy python3-opencv \
-        libssl1.1 libcpprest libswscale4 libavformat57 graphviz libprotobuf-c1 duktape libmosquitto1 && \
-    apt clean all && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+        build-essential unzip ffmpeg sudo bash vim gdb git doxygen autoconf cmake openssh-server \
+        python3-wheel python3-numpy python3-opencv libopencv-dev pkg-config kmod net-tools pciutils \
+        libssl-dev libcpprest-dev libswscale-dev libavformat-dev graphviz libgraphviz-dev libfuse-dev \
+        libprotobuf-c-dev protobuf-c-compiler duktape-dev libmosquitto-dev && \
+    apt clean all && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
+    find /var/log/ -type f | xargs rm -f 
 
 RUN mkdir -p /root/.pip && \
     echo "[global]" > /root/.pip/pip.conf && \
@@ -68,13 +85,17 @@ RUN umask 0022 && \
     rm -rf /root/* && \
     rm -f /usr/bin/python && ln -s python3 /usr/bin/python && \
     echo "/usr/local/lib" >>  /etc/ld.so.conf && \
+    sed -i "32aPermitRootLogin yes" /etc/ssh/sshd_config && \
     sed -i 's/^\(module(load="imklog")\)/#\1/' /etc/rsyslog.conf && \
+    echo 'export TMOUT=0' >> ~/.bashrc && \
     echo "export JAVA_HOME=/usr/lib/jvm/jdk-17" >> ~/.bashrc && \
-    echo "export PATH=\${JAVA_HOME}/bin:$PATH" >> ~/.bashrc
+    echo "export MAVEN_HOME=/usr/local/apache-maven-3.8.3" >> ~/.bashrc && \
+    echo "export PATH=\${JAVA_HOME}/bin:\${MAVEN_HOME}/bin:$PATH" >> ~/.bashrc && \
+    echo 'export PS1="\[\e[35;1m\][\u@\h \W]$ \[\e[0m\]"' >> ~/.bashrc && \
+    echo '[ -n "${SSH_TTY}" ] && export $(cat /proc/1/environ|tr "\\0" "\\n"|xargs)' >> ~/.bashrc
 
 RUN python3 -m pip install --no-cache-dir pyyaml opencv-python && \
     python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && \
-    ls /opt/release|egrep 'devel|document|solution'|xargs -i rm -f /opt/release/{} && \
     dpkg -i /opt/release/*.deb && \
     groupadd HwHiAiUser && \
     useradd -g HwHiAiUser -d /home/HwHiAiUser -m HwHiAiUser && \
@@ -94,7 +115,7 @@ RUN python3 -m pip install --no-cache-dir pyyaml opencv-python && \
     sed -i '/ForwardToSyslog/s/^#//g' /etc/systemd/journald.conf && \
     systemctl set-default multi-user.target && \
     systemctl mask dev-hugepages.mount sys-fs-fuse-connections.mount && \
-    ldconfig &>/dev/null && systemctl enable modelbox
+    ldconfig &>/dev/null && systemctl enable modelbox ssh systemd-journald
 
 VOLUME ["/sys/fs/cgroup", "/tmp", "/run", "/run/lock"]
 STOPSIGNAL SIGRTMIN+3
