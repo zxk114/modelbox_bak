@@ -47,6 +47,7 @@ RUN NVIDIA_GPGKEY_SUM=d1be581509378368edeec8c1eb2958702feedf3bc3d17011adbf24efac
         cuda-libraries-$([ "${CUDA_VERSION}" == "11.2" ] && echo "devel" || echo "dev")-${CUDA_VER} \
         cuda-command-line-tools-${CUDA_VER} && \
     ln -s cuda-${CUDA_VERSION} /usr/local/cuda && \
+    cp -af /usr/local/cuda/compat/* /usr/local/lib64/ && \
     find / -name libcublas.so.${CUDA_VERSION%.*}|xargs -i ln -s {} /usr/local/lib64/libcublas.so.${CUDA_VERSION} && \
     yum clean all && rm -rf /root/* /var/cache /etc/yum.repos.d/cuda.repo
 
@@ -103,7 +104,6 @@ RUN curl https://nodejs.org/dist/v16.13.2/node-v16.13.2-linux-x64.tar.xz|tar -xJ
 
 RUN python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && \
     rpm -ivh /opt/release/*.rpm && \
-    rm -f /usr/local/lib64/libnvidia* /usr/local/lib64/libcuda.so* /usr/local/lib64/libnvcuvid.so && \
     (cd /lib/systemd/system/sysinit.target.wants/; for i in *; \
     do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done); \
     rm -f /lib/systemd/system/multi-user.target.wants/*; \
@@ -117,16 +117,16 @@ RUN python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && 
     sed -i '/ForwardToSyslog/s/^#//g' /etc/systemd/journald.conf && \
     systemctl set-default multi-user.target && \
     systemctl mask dev-hugepages.mount sys-fs-fuse-connections.mount && \
+    echo "/usr/local/cuda/compat" >> /etc/ld.so.conf.d/cuda.conf && \
+    echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf && \
+    echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf && \
     ldconfig &>/dev/null && systemctl enable modelbox sshd systemd-journald && \
-    echo "/usr/local/lib" >> /etc/ld.so.conf && \
-    echo "/usr/local/lib64" >> /etc/ld.so.conf && \
-    echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf && \
     echo "export PKG_CONFIG_PATH=/usr/local/lib64/pkgconfig" > /etc/profile.d/pkgconfig.sh && \
     sed -i 's/^\(module(load="imklog")\)/#\1/' /etc/rsyslog.conf && \
     sed -i '/TMOUT/s/300/0/g' /etc/bashrc && \
     echo 'HISTSIZE=1000' >> /etc/bashrc && \
     echo "export JAVA_HOME=/usr/local/jdk-17" >> /etc/bashrc && \
-    echo "export MAVEN_HOME=/usr/local/apache-maven-3.8.3" >> /etc/bashrc && \
+    echo "export MAVEN_HOME=/usr/local/apache-maven-3.8.4" >> /etc/bashrc && \
     echo "export PATH=\${JAVA_HOME}/bin:\${MAVEN_HOME}/bin:$PATH" >> /etc/bashrc && \
     echo 'export PS1="\[\e[35;1m\][\u@\h \W]$ \[\e[0m\]"' >> /etc/bashrc
 
@@ -136,7 +136,7 @@ STOPSIGNAL SIGRTMIN+3
 LABEL com.nvidia.volumes.needed="nvidia_driver" com.nvidia.cuda.verison="${NVIDIA_CUDA_VERSION}"
 
 ENV PATH /usr/local/nvidia/bin:/usr/local/cuda/bin${PATH:+:${PATH}}
-ENV LD_LIBRARY_PATH /usr/local/nvidia/lib64:/usr/local/lib:/usr/local/cuda/lib64/stubs${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+ENV LD_LIBRARY_PATH /usr/local/cuda/lib64/stubs:/usr/local/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES video,compute,utility
 ENV NVIDIA_REQUIRE_CUDA "${NVIDIA_REQUIRE_CUDA}"

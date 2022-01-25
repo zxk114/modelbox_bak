@@ -45,7 +45,6 @@ RUN umask 0022 && \
         cuda-libraries-${CUDA_VER} && \
     ln -s cuda-${CUDA_VERSION} /usr/local/cuda && \
     find / -name libcublas.so.${CUDA_VERSION%.*}|xargs -i ln -s {} /usr/local/lib64/libcublas.so.${CUDA_VERSION} && \
-    cp -af /usr/local/cuda/compat/* /usr/local/lib64/ && \
     yum clean all && rm -rf /root/* /var/cache /etc/yum.repos.d/cuda.repo
 
 RUN mkdir -p /root/.pip && \
@@ -73,23 +72,9 @@ RUN mkdir -p /root/.pip && \
         cp -af libtorch/lib /usr/local/; fi && \
     yum clean all && rm -rf /var/lib/apt/lists/* /root/*
 
-RUN curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/Video_Codec_SDK_9.1.23.zip && \
-    unzip -j Video_Codec_SDK_9.1.23.zip \
-        Video_Codec_SDK_9.1.23/include/cuviddec.h \
-        Video_Codec_SDK_9.1.23/include/nvcuvid.h \
-        Video_Codec_SDK_9.1.23/include/nvEncodeAPI.h \
-        -d /usr/local/include && \
-    unzip -j Video_Codec_SDK_9.1.23.zip \
-        Video_Codec_SDK_9.1.23/Lib/linux/stubs/x86_64/libnvcuvid.so \
-        Video_Codec_SDK_9.1.23/Lib/linux/stubs/x86_64/libnvidia-encode.so \
-        -d /usr/local/lib64 && \
-    ln -s libnvcuvid.so /usr/local/lib64/libnvcuvid.so.1 && \
-    rm -rf /root/*
-
 RUN python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && \
     ls /opt/release|egrep 'devel|document|solution'|xargs -i rm -f /opt/release/{} && \
     rpm -ivh /opt/release/*.rpm && \
-    rm -f /usr/local/lib64/libnvidia* /usr/local/lib64/libcuda.so* /usr/local/lib64/libnvcuvid.so && \
     (cd /lib/systemd/system/sysinit.target.wants/; for i in *; \
     do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done); \
     rm -f /lib/systemd/system/multi-user.target.wants/*; \
@@ -103,10 +88,10 @@ RUN python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && 
     sed -i '/ForwardToSyslog/s/^#//g' /etc/systemd/journald.conf && \
     systemctl set-default multi-user.target && \
     systemctl mask dev-hugepages.mount sys-fs-fuse-connections.mount && \
-    ldconfig &>/dev/null && systemctl enable modelbox sshd systemd-journald && \
-    echo "/usr/local/lib" >> /etc/ld.so.conf && \
-    echo "/usr/local/lib64" >> /etc/ld.so.conf && \
-    echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf && \
+    echo "/usr/local/cuda/compat" >> /etc/ld.so.conf.d/cuda.conf && \
+    echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf && \
+    echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf && \
+    ldconfig &>/dev/null && systemctl enable modelbox systemd-journald && \
     echo "export PKG_CONFIG_PATH=/usr/local/lib64/pkgconfig" > /etc/profile.d/pkgconfig.sh && \
     sed -i 's/^\(module(load="imklog")\)/#\1/' /etc/rsyslog.conf && \
     echo "export JAVA_HOME=/usr/local/jdk-17" >> /etc/bashrc && \
@@ -117,7 +102,8 @@ STOPSIGNAL SIGRTMIN+3
 
 LABEL com.nvidia.volumes.needed="nvidia_driver" com.nvidia.cuda.verison="${NVIDIA_CUDA_VERSION}"
 
-ENV LD_LIBRARY_PATH /usr/local/nvidia/lib64:/usr/local/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+ENV PATH /usr/local/nvidia/bin:/usr/local/cuda/bin${PATH:+:${PATH}}
+ENV LD_LIBRARY_PATH /usr/local/cuda/compat:/usr/local/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES video,compute,utility
 ENV NVIDIA_REQUIRE_CUDA "${NVIDIA_REQUIRE_CUDA}"

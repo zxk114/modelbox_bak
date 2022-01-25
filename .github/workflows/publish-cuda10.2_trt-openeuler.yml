@@ -30,13 +30,17 @@ jobs:
         yum install -y vim gcc gcc-c++ make cmake libnsl python3-perf rsyslog doxygen pciutils gdb net-tools zlib-devel \
                 rpm-build gcc-gfortran alsa-lib nss-devel fuse-devel gdbm-devel krb5-devel expat-devel curl-devel bzip2-devel \
                 boost-devel ncurses-devel libxml2-devel libssh2-devel openssh-server python3-devel glibc-debuginfo libatomic \
-                git clang xauth graphviz-devel sqlite-devel openssl-devel readline-devel mesa-libGL-devel protobuf-c-devel && \
-        ls -lh /usr/bin/python* && ln -s python3 /usr/bin/python && yum clean all && \
-        rm -rf /var/cache /tmp/* /var/tmp/*
+                git clang xauth graphviz-devel sqlite-devel openssl-devel readline-devel mesa-libGL-devel protobuf-c-devel
+        rm -f /usr/bin/python3 /usr/bin/python
+        ln -s python3.7 /usr/bin/python3
+        ln -s python3 /usr/bin/python
+        ls -lh /usr/bin/python*
+        /usr/bin/python -V && /usr/bin/python3 -V
+        echo "Install dependencies success"
     - name: Install cuda
       run: |
         NVIDIA_GPGKEY_SUM=d1be581509378368edeec8c1eb2958702feedf3bc3d17011adbf24efacce4ab5 && \
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/7fa2af80.pub | sed '/^Version/d' > /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA && \
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/7fa2af80.pub | sed '/^Version/d' > /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA
         echo "$NVIDIA_GPGKEY_SUM  /etc/pki/rpm-gpg/RPM-GPG-KEY-NVIDIA" | sha256sum -c --strict -
         cp -af ./docker/repo/*.repo /etc/yum.repos.d/
         yum install -y --nogpgcheck --setopt=obsoletes=0 \
@@ -69,6 +73,7 @@ jobs:
         npm config set registry https://registry.npm.taobao.org
         npm install -g npm@latest
         npm install -g @angular/cli
+        npm -v && node -v
         npm cache clean --force
 
         curl -LJO https://download.java.net/java/GA/jdk17/0d483333a00540d886896bac774ff48b/35/GPL/openjdk-17_linux-x64_bin.tar.gz
@@ -102,9 +107,9 @@ jobs:
     - name: CMake
       run: |
         pwd
-        export JAVA_HOME=/usr/lib/jvm/jdk-17
-        export MAVEN_HOME=/usr/local/apache-maven-3.8.3
-        export LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+        export JAVA_HOME=/usr/local/jdk-17
+        export MAVEN_HOME=/usr/local/apache-maven-3.8.4
+        export LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:/usr/local/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
         export PATH=/usr/local/cuda/bin:$JAVA_HOME/bin:$MAVEN_HOME/bin${PATH:+:${PATH}}
         export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}
         ls -lh .
@@ -113,7 +118,7 @@ jobs:
         cd build
         cmake .. -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_WEB_UI=on
     - name: Build
-      working-directory: ${{github.workspace}}/build
+      working-directory: ./build
       run: |
         make package -j4
         ls -lh release
@@ -126,15 +131,14 @@ jobs:
             echo "compile failed"
             exit 1
         fi
-    - name: prepare-artifact
+    - name: Prepare Artifact
       run: |
         pwd
         mkdir ./artifact
         ls -lh .
-        cp -af ./*.tar.gz ./artifact/
         cp -af ./build/release ./artifact/
         ls -lh ./artifact
-    - name: upload-artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v2
       with:
         name: modelbox-artifact
@@ -153,20 +157,28 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME_zxk }}
           password: ${{ secrets.DOCKERHUB_TOKEN_zxk }}
-      - name: download-artifact
+      - name: Download Artifact
         uses: actions/download-artifact@v2
         with:
           name: modelbox-artifact
-          path: ${{github.workspace}}/
-      - name: Prepare
+          path: ./
+      - name: Prepare and Recheck
         run: |
-          ls -lh ${{github.workspace}}/*
-      - name: Build and push
+          curl -LJO https://download.java.net/java/GA/jdk17/0d483333a00540d886896bac774ff48b/35/GPL/openjdk-17_linux-x64_bin.tar.gz
+          curl -LJO https://dlcdn.apache.org/maven/maven-3/3.8.4/binaries/apache-maven-3.8.4-bin.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/obs-dev.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/cpprestsdk-dev.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/duktape-dev.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/ffmpeg-dev.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/opencv-dev.tar.gz
+          ls -lh .
+          ls -lh ./release
+      - name: Build and Push
         id: docker_build
         uses: docker/build-push-action@v2
         with:
-          push: false
-          context: ${{github.workspace}}
+          push: true
+          context: .
           file: ./docker/Dockerfile.cuda.develop.openeuler
           build-args: |
             CUDA_VER=${{ env.CUDA_VER }}
@@ -192,20 +204,27 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME_zxk }}
           password: ${{ secrets.DOCKERHUB_TOKEN_zxk }}
-      - name: download-artifact
+      - name: Download Artifact
         uses: actions/download-artifact@v2
         with:
           name: modelbox-artifact
-          path: ${{github.workspace}}/
-      - name: Prepare
+          path: ./
+      - name: Prepare and Recheck
         run: |
-          ls -lh ${{github.workspace}}/*
-      - name: Build and push
+          curl -LJO https://download.java.net/java/GA/jdk17/0d483333a00540d886896bac774ff48b/35/GPL/openjdk-17_linux-x64_bin.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/obs.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/cpprestsdk.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/duktape.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/ffmpeg.tar.gz
+          curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/opencv.tar.gz
+          ls -lh .
+          ls -lh ./release
+      - name: Build and Push
         id: docker_build
         uses: docker/build-push-action@v2
         with:
-          push: false
-          context: ${{github.workspace}}
+          push: true
+          context: .
           file: ./docker/Dockerfile.cuda.runtime.openeuler
           build-args: |
             CUDA_VER=${{ env.CUDA_VER }}

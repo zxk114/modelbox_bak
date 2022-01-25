@@ -1,4 +1,4 @@
-name: Publish Ascend Runtime
+name: Publish ascend-mindspore-ubuntu
 on:
   workflow_dispatch:
   push:
@@ -6,7 +6,8 @@ on:
       - v*
 env:
   BUILD_TYPE: Release
-  DOCKERHUB_REPO: "modelbox/modelbox-runtime-mindspore_1.3.0-cann_5.0.2-ubuntu-x86_64"
+  IMAGE_NAME_DEV: "zxk114/modelbox-develop-mindspore_1.3.0-cann_5.0.2-ubuntu-x86_64"
+  IMAGE_NAME_RUN: "zxk114/modelbox-runtime-mindspore_1.3.0-cann_5.0.2-ubuntu-x86_64"
   IMAGE_VERSION: "v1.1.3"
 
 jobs:
@@ -29,16 +30,14 @@ jobs:
             python3-wheel python3-numpy python3-opencv libopencv-dev pkg-config kmod net-tools pciutils \
             libssl-dev libcpprest-dev libswscale-dev libavformat-dev graphviz libgraphviz-dev libfuse-dev \
             libprotobuf-c-dev protobuf-c-compiler duktape-dev libmosquitto-dev
-        rm -f /usr/bin/python3 /usr/bin/python
-        ln -s python3.7 /usr/bin/python3
-        ln -s python3 /usr/bin/python
-
+        echo "Install dependencies success"
     - name: Install ThirdParty
       run: |
         curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
         apt-get install -y nodejs
         npm install -g npm@latest
         npm install -g @angular/cli
+        npm -v && node -v
         npm cache clean --force
 
         curl -LJO https://github.com/zxk114/modelbox/releases/download/binary/obs-dev.tar.gz
@@ -49,8 +48,9 @@ jobs:
         curl -LJO https://dlcdn.apache.org/maven/maven-3/3.8.4/binaries/apache-maven-3.8.4-bin.tar.gz
         tar zxf apache-maven-3.8.4-bin.tar.gz -C /usr/local/
 
-        yes | python3 -m pip install --upgrade pip
-        yes | pip3 install pillow numpy wheel
+        python3 -m pip install --upgrade pip
+        python3 -m pip install --no-cache-dir wheel attrs psutil decorator numpy protobuf scipy sympy cffi grpcio grpcio-tools requests pillow
+        python3 -m pip install --no-cache-dir https://ms-release.obs.cn-north-4.myhuaweicloud.com/1.3.0/MindSpore/ascend/x86_64/mindspore_ascend-1.3.0-cp37-cp37m-linux_x86_64.whl
     - name: CMake
       run: |
         pwd
@@ -61,14 +61,20 @@ jobs:
         /usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/ascend-toolkit/latest/acllib/lib64:\
         /usr/local/Ascend/ascend-toolkit/latest/fwkacllib/lib64:\
         /usr/local/Ascend/ascend-toolkit/latest/atc/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
-        export JAVA_HOME=/usr/lib/jvm/jdk-17
-        export MAVEN_HOME=/usr/local/apache-maven-3.8.3
+        export JAVA_HOME=/usr/local/jdk-17
+        export MAVEN_HOME=/usr/local/apache-maven-3.8.4
         export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}
+        rm -f /usr/bin/python3 /usr/bin/python
+        update-alternatives --install /usr/bin/python python /usr/bin/python3.7 100
+        update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 100
+        update-alternatives --config python3
+        ls -lh /usr/bin/python*
+        /usr/bin/python -V && /usr/bin/python3 -V
         mkdir build
         cd build
         cmake .. -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_WEB_UI=on
     - name: Build
-      working-directory: ${{github.workspace}}/build
+      working-directory: ./build
       run: |
         make package -j4
         rm -f release/*.rpm
@@ -82,13 +88,20 @@ jobs:
             echo "compile failed"
             exit 1
         fi
-    - name: upload-artifact
+    - name: Prepare Artifact
+      run: |
+        pwd
+        mkdir ./artifact
+        ls -lh .
+        cp -af ./build/release ./artifact/
+        ls -lh ./artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v2
       with:
-        name: modelbox-release
-        path: ${{github.workspace}}/build/release
+        name: modelbox-artifact
+        path: ./artifact
 
-  build_image:
+  build_develop_image:
     runs-on: ubuntu-latest
     needs: compile
     steps:
@@ -99,27 +112,61 @@ jobs:
       - name: Login to DockerHub
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: mkdir
-        run: mkdir ./release
-      - name: download-artifact
+          username: ${{ secrets.DOCKERHUB_USERNAME_zxk }}
+          password: ${{ secrets.DOCKERHUB_TOKEN_zxk }}
+      - name: Download Artifact
         uses: actions/download-artifact@v2
         with:
-          name: modelbox-release
-          path: ./release/
-      - name: Prepare
+          name: modelbox-artifact
+          path: ./
+      - name: Prepare and Recheck
         run: |
-          ls -lh ./release/*
-      - name: Build and push
+          ls -lh .
+          ls -lh ./release
+      - name: Build and Push
         id: docker_build
         uses: docker/build-push-action@v2
         with:
           push: true
           context: .
-          file: ./docker/Dockerfile.ascend.runtime
+          file: ./docker/Dockerfile.ascend.develop.ubuntu
           build-args: |
             IMAGE_VERSION=${{ env.IMAGE_VERSION }}
           tags: |
-            ${{ env.DOCKERHUB_REPO }}:latest
-            ${{ env.DOCKERHUB_REPO }}:${{ env.IMAGE_VERSION }}
+            ${{ env.IMAGE_NAME_DEV }}:latest
+            ${{ env.IMAGE_NAME_DEV }}:${{ env.IMAGE_VERSION }}
+
+  build_runtime_image:
+    runs-on: ubuntu-latest
+    needs: compile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME_zxk }}
+          password: ${{ secrets.DOCKERHUB_TOKEN_zxk }}
+      - name: Download Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: modelbox-artifact
+          path: ./
+      - name: Prepare and Recheck
+        run: |
+          ls -lh .
+          ls -lh ./release
+      - name: Build and Push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          context: .
+          file: ./docker/Dockerfile.ascend.runtime.ubuntu
+          build-args: |
+            IMAGE_VERSION=${{ env.IMAGE_VERSION }}
+          tags: |
+            ${{ env.IMAGE_NAME_RUN }}:latest
+            ${{ env.IMAGE_NAME_RUN }}:${{ env.IMAGE_VERSION }}

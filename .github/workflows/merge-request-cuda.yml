@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: zxk114/modelbox-develop-libtorch_1.9.1-cuda_10.2-ubuntu-x86_64
+      image: zxk114/modelbox-develop-tensorflow_2.6.0-cuda_11.2-ubuntu-x86_64:latest
 
     steps:
     - uses: actions/checkout@v2
